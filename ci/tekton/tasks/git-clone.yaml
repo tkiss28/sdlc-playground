@@ -41,7 +41,18 @@ spec:
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
-        TARGET="$(workspaces.source.path)/$(params.subdirectory)"
+        SUBDIR="$(params.subdirectory)"
+        # A subdirectory is required: the workspace PVC is persistent and also
+        # holds the sibling .m2 cache at its root, so we must confine the checkout
+        # (and the clean-slate wipe below) to a subdir and never the workspace root.
+        if [ -z "${SUBDIR}" ]; then
+          echo "ERROR: git-clone requires a non-empty subdirectory param" >&2
+          exit 1
+        fi
+        TARGET="$(workspaces.source.path)/${SUBDIR}"
+        # Fresh checkout every run (reproducibility) without disturbing the
+        # persisted .m2 cache that lives beside this dir.
+        rm -rf "${TARGET}"
         mkdir -p "${TARGET}"
         cd "${TARGET}"
         # The workspace dir is owned by a different UID than this step runs as;

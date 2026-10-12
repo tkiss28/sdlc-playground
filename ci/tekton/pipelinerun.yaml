@@ -29,18 +29,14 @@ spec:
   #   oc create configmap pnc-provenance-key -n petclinic \
   #     --from-file=pnc-provenance-signing-key-1.pub=ci/tekton/keys/pnc-provenance-signing-key-1.pub
   workspaces:
+    # Persistent PVC (created by bootstrap) so the .m2 cache survives between runs.
+    # The project is cloned fresh into app/ each run; the cache sits beside it.
+    # NOTE: RWO — runs serialize on this claim (fine for the single-user PoC).
     - name: shared
-      volumeClaimTemplate:
-        spec:
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: 2Gi
+      persistentVolumeClaim:
+        claimName: pipeline-workspace
     - name: maven-settings
       configMap:
         name: maven-settings
-    - name: maven-repo
-      persistentVolumeClaim:
-        claimName: maven-cache
   timeouts:
     pipeline: "1h0m0s"

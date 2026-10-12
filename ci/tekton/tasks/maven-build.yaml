@@ -21,15 +21,13 @@ spec:
       default: "-B -DskipTests=false clean verify"
   workspaces:
     - name: source
-      description: Cloned app source (the project; also the nohttp scan root).
+      description: >-
+        Persistent workspace PVC. The project is cloned into the `app/`
+        subdirectory (the nohttp scan root) while the .m2 cache lives at
+        /workspace/source/.m2/repository — a SIBLING of app/, so it is outside
+        ${basedir} and nohttp-checkstyle does not walk the dependency POMs.
     - name: maven-settings
       description: ConfigMap-backed workspace providing settings.xml.
-    - name: maven-repo
-      description: >-
-        Persistent .m2 cache. Mounted OUTSIDE the project dir so petclinic's
-        nohttp-checkstyle (which scans ${basedir}=the source dir) does not walk
-        the downloaded dependency POMs. settings.xml points localRepository here.
-      mountPath: /workspace/m2
   results:
     - name: sbom-path
       description: Workspace-relative path to the generated CycloneDX SBOM.

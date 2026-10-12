@@ -85,7 +85,7 @@ oc patch configs.imageregistry.operator.openshift.io/cluster --type merge \
 log "Creating namespace ${APP_NS} and applying Tekton RBAC/tasks/pipeline"
 oc create namespace "${APP_NS}" --dry-run=client -o yaml | oc apply -f -
 oc apply -f "${REPO_ROOT}/ci/tekton/rbac.yaml"
-oc apply -f "${REPO_ROOT}/ci/tekton/maven-cache-pvc.yaml" -n "${APP_NS}"
+oc apply -f "${REPO_ROOT}/ci/tekton/workspace-pvc.yaml" -n "${APP_NS}"
 oc apply -f "${REPO_ROOT}/ci/tekton/tasks/"
 oc apply -f "${REPO_ROOT}/ci/tekton/pipeline.yaml"
 

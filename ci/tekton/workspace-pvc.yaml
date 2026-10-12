@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pipeline-workspace
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  # Shared, persistent pipeline workspace: holds the freshly-cloned project under
+  # app/ plus the persisted .m2 cache at the root. RWO is fine — only one
+  # PipelineRun uses it at a time; concurrent runs serialize on this claim.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 3Gi
