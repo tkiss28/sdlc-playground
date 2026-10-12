@@ -21,9 +21,15 @@ spec:
       default: "-B -DskipTests=false clean verify"
   workspaces:
     - name: source
-      description: Cloned app source; also holds the persisted .m2 cache.
+      description: Cloned app source (the project; also the nohttp scan root).
     - name: maven-settings
       description: ConfigMap-backed workspace providing settings.xml.
+    - name: maven-repo
+      description: >-
+        Persistent .m2 cache. Mounted OUTSIDE the project dir so petclinic's
+        nohttp-checkstyle (which scans ${basedir}=the source dir) does not walk
+        the downloaded dependency POMs. settings.xml points localRepository here.
+      mountPath: /workspace/m2
   results:
     - name: sbom-path
       description: Workspace-relative path to the generated CycloneDX SBOM.
@@ -48,7 +54,10 @@ spec:
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
-        ./mvnw -s "$(workspaces.maven-settings.path)/settings.xml" $(params.goals)
+        # Use the Maven bundled in the ubi9/openjdk-17 builder image rather than
+        # ./mvnw: the wrapper downloads apache-maven as a .tar.gz, and this image
+        # has no gzip (and the step runs as a non-root UID that cannot install it).
+        mvn -s "$(workspaces.maven-settings.path)/settings.xml" $(params.goals)
 
         # Record where the SBOM landed for the downstream attest step.
         SBOM="$(params.subdirectory)/target/bom.json"

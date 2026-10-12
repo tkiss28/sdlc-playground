@@ -39,5 +39,8 @@ spec:
     - name: maven-settings
       configMap:
         name: maven-settings
+    - name: maven-repo
+      persistentVolumeClaim:
+        claimName: maven-cache
   timeouts:
     pipeline: "1h0m0s"

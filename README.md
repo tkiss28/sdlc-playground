@@ -53,6 +53,15 @@ Create a service account on
 to use as `RH_LIGHTWELL_USER` `RH_LIGHTWELL_TOKEN` environment
 variables.
 
+### Tekton CLI
+
+```
+# Get the tar.xz
+curl -LO https://github.com/tektoncd/cli/releases/download/v0.46.0/tkn_0.46.0_Darwin_all.tar.gz
+# Extract tkn to your PATH (e.g. /usr/local/bin)
+sudo tar xvzf tkn_0.46.0_Darwin_all.tar.gz -C /usr/local/bin tkn
+```
+
 ### CRC setup
 
 1. Install the crc binary (onto your PATH at ~/go/bin)

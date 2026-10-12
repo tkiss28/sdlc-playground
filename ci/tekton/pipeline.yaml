@@ -27,9 +27,11 @@ spec:
       default: "true"
   workspaces:
     - name: shared
-      description: Cloned source + persisted .m2 cache; shared across tasks.
+      description: Cloned source; shared across tasks (per-run volume).
     - name: maven-settings
       description: ConfigMap workspace carrying the Lightwell settings.xml.
+    - name: maven-repo
+      description: Persistent .m2 cache (own PVC); used only by maven-build.
   results:
     - name: IMAGE_URL
       value: $(tasks.build-image.results.IMAGE_URL)
@@ -61,6 +63,8 @@ spec:
           workspace: shared
         - name: maven-settings
           workspace: maven-settings
+        - name: maven-repo
+          workspace: maven-repo
 
     - name: provenance-verify
       runAfter: ["maven-build"]

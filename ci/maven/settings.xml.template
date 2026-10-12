@@ -29,15 +29,18 @@
   (kept there verbatim; an XML comment may not contain a literal double hyphen,
   so the full option flags are not reproduced inline here).
 
-  <localRepository> points at the shared workspace PVC so the .m2 cache persists
-  between PipelineRuns.
+  <localRepository> points at the dedicated maven-repo workspace (a persistent
+  PVC), mounted at /workspace/m2 — OUTSIDE the cloned project at /workspace/source.
+  This keeps the .m2 cache across PipelineRuns while staying clear of petclinic's
+  nohttp-checkstyle, which scans ${basedir}/**/* and would otherwise fail on
+  http:// URLs inside third-party dependency POMs (e.g. antlr's license link).
 -->
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
                               https://maven.apache.org/xsd/settings-1.0.0.xsd">
 
-  <localRepository>/workspace/source/.m2/repository</localRepository>
+  <localRepository>/workspace/m2/repository</localRepository>
 
   <servers>
     <!-- The <server> id MUST match the <repository> id below (lightwell-validated). -->

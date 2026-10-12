@@ -33,12 +33,20 @@ spec:
     - name: clone
       image: registry.access.redhat.com/ubi9/toolbox:latest
       workingDir: $(workspaces.source.path)
+      env:
+        # OpenShift runs this step as an arbitrary non-root UID, so HOME=/ is not
+        # writable. Point HOME at a writable dir so git config / cred copy work.
+        - name: HOME
+          value: /tekton/home
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
         TARGET="$(workspaces.source.path)/$(params.subdirectory)"
         mkdir -p "${TARGET}"
         cd "${TARGET}"
+        # The workspace dir is owned by a different UID than this step runs as;
+        # tell git it is safe so the arbitrary-UID checkout is not rejected.
+        git config --global --add safe.directory "${TARGET}"
         git init -q
         git remote add origin "$(params.url)"
         git fetch -q --depth 1 origin "$(params.revision)"
