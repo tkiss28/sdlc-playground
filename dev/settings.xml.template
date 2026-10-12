@@ -5,7 +5,7 @@
 
   Usage:
     1. cp dev/settings.xml.template ~/.m2/settings.xml
-    2. Fill in REDHAT_LIGHTWELL_USERNAME / REDHAT_LIGHTWELL_TOKEN below
+    2. Fill in RH_LIGHTWELL_USER / RH_LIGHTWELL_TOKEN below
        (or export them as env vars; Maven expands ${env.VAR}).
     3. Build with a clean local repo to PROVE provenance:
          ./mvnw -Dmaven.repo.local=$(mktemp -d) -DskipTests clean verify
@@ -32,8 +32,8 @@
     <!-- The <server> id MUST match the <repository> id below (lightwell-validated). -->
     <server>
       <id>lightwell-validated</id>
-      <username>${env.REDHAT_LIGHTWELL_USERNAME}</username>
-      <password>${env.REDHAT_LIGHTWELL_TOKEN}</password>
+      <username>${env.RH_LIGHTWELL_USER}</username>
+      <password>${env.RH_LIGHTWELL_TOKEN}</password>
     </server>
   </servers>
 

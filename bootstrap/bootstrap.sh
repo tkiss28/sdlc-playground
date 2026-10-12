@@ -9,7 +9,7 @@
 # Prereqs on your PATH: crc, oc, cosign.
 #
 # Usage:
-#   export REDHAT_LIGHTWELL_USERNAME=... REDHAT_LIGHTWELL_TOKEN=...
+#   export RH_LIGHTWELL_USER=... RH_LIGHTWELL_TOKEN=...
 #   ./bootstrap/bootstrap.sh
 #
 set -euo pipefail
@@ -28,8 +28,8 @@ die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- 0. preflight -------------------------------------------------------------
 for bin in oc cosign; do command -v "$bin" >/dev/null || die "missing required binary: $bin"; done
-: "${REDHAT_LIGHTWELL_USERNAME:?set REDHAT_LIGHTWELL_USERNAME}"
-: "${REDHAT_LIGHTWELL_TOKEN:?set REDHAT_LIGHTWELL_TOKEN}"
+: "${RH_LIGHTWELL_USER:?set RH_LIGHTWELL_USER}"
+: "${RH_LIGHTWELL_TOKEN:?set RH_LIGHTWELL_TOKEN}"
 
 # --- 1. CRC (optional; skip if already logged in) -----------------------------
 if ! oc whoami >/dev/null 2>&1; then
@@ -91,8 +91,8 @@ oc apply -f "${REPO_ROOT}/ci/tekton/pipeline.yaml"
 # --- 5. Red Hat Lightwell credentials + maven settings ------------------------
 log "Creating Red Hat Lightwell credentials secret + maven-settings ConfigMap"
 oc create secret generic redhat-lightwell-creds -n "${APP_NS}" \
-  --from-literal=username="${REDHAT_LIGHTWELL_USERNAME}" \
-  --from-literal=token="${REDHAT_LIGHTWELL_TOKEN}" \
+  --from-literal=username="${RH_LIGHTWELL_USER}" \
+  --from-literal=token="${RH_LIGHTWELL_TOKEN}" \
   --dry-run=client -o yaml | oc apply -f -
 oc create configmap maven-settings -n "${APP_NS}" \
   --from-file=settings.xml="${REPO_ROOT}/ci/maven/settings.xml.template" \

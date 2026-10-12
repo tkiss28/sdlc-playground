@@ -79,9 +79,9 @@ coordinate directory on the validated-tier server as the `.jar`.
 #    coordinate directory, using your Basic creds.
 BASE=https://packages.redhat.com/lightwell/java/validated
 G=org/aspectj A=aspectjweaver V=1.9.25.1
-curl -fSL -u "$REDHAT_LIGHTWELL_USERNAME:$REDHAT_LIGHTWELL_TOKEN" \
+curl -fSL -u "$RH_LIGHTWELL_USER:$RH_LIGHTWELL_TOKEN" \
   -O "$BASE/$G/$A/$V/$A-$V.jar"
-curl -fSL -u "$REDHAT_LIGHTWELL_USERNAME:$REDHAT_LIGHTWELL_TOKEN" \
+curl -fSL -u "$RH_LIGHTWELL_USER:$RH_LIGHTWELL_TOKEN" \
   -O "$BASE/$G/$A/$V/$A-$V.provenance.sigstore.json"
 
 # 2. Verify the SLSA provenance attestation against the PNC public key.

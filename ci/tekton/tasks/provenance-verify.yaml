@@ -37,12 +37,12 @@ spec:
       # Credentials come from the Secret redhat-lightwell-creds, same pattern as
       # maven-build.yaml. The public key is NOT secret (ConfigMap, step 2).
       env:
-        - name: REDHAT_LIGHTWELL_USERNAME
+        - name: RH_LIGHTWELL_USER
           valueFrom:
             secretKeyRef:
               name: redhat-lightwell-creds
               key: username
-        - name: REDHAT_LIGHTWELL_TOKEN
+        - name: RH_LIGHTWELL_TOKEN
           valueFrom:
             secretKeyRef:
               name: redhat-lightwell-creds
@@ -78,7 +78,7 @@ spec:
           fi
 
           echo "downloading ${URL}"
-          if ! curl -fsSL -u "${REDHAT_LIGHTWELL_USERNAME}:${REDHAT_LIGHTWELL_TOKEN}" \
+          if ! curl -fsSL -u "${RH_LIGHTWELL_USER}:${RH_LIGHTWELL_TOKEN}" \
                  -o "/bundles/${BUNDLE}" "${URL}"; then
             echo "FAIL: could not download provenance bundle ${BUNDLE}"
             rc=1

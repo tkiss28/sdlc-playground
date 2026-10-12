@@ -50,7 +50,7 @@ monitoring), 8 (agentic remediation) are Phase 2 — see
 
 Create a service account on
 [https://access.redhat.com/terms-based-registry/](https://access.redhat.com/terms-based-registry/)
-to use as `REDHAT_LIGHTWELL_USERNAME` `REDHAT_LIGHTWELL_TOKEN` environment
+to use as `RH_LIGHTWELL_USER` `RH_LIGHTWELL_TOKEN` environment
 variables.
 
 ### CRC setup
@@ -99,7 +99,7 @@ oc whoami                                      # should print kube:admin
 
 ```bash
 # prereqs on PATH: crc, oc, cosign  (and a running/startable CRC)
-export REDHAT_LIGHTWELL_USERNAME=... REDHAT_LIGHTWELL_TOKEN=...
+export RH_LIGHTWELL_USER=... RH_LIGHTWELL_TOKEN=...
 ./bootstrap/bootstrap.sh
 ```
 

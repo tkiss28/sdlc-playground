@@ -4,7 +4,7 @@
 
   This file is rendered into a ConfigMap (non-secret parts) while the credentials
   come from the Secret `redhat-lightwell-creds` and are injected as the env vars
-  REDHAT_LIGHTWELL_USERNAME / REDHAT_LIGHTWELL_TOKEN on the maven step (see
+  RH_LIGHTWELL_USER / RH_LIGHTWELL_TOKEN on the maven step (see
   ci/tekton/tasks/maven-build.yaml). Maven expands ${env.VAR} at runtime, so no
   secret material is ever stored in the ConfigMap.
 
@@ -43,8 +43,8 @@
     <!-- The <server> id MUST match the <repository> id below (lightwell-validated). -->
     <server>
       <id>lightwell-validated</id>
-      <username>${env.REDHAT_LIGHTWELL_USERNAME}</username>
-      <password>${env.REDHAT_LIGHTWELL_TOKEN}</password>
+      <username>${env.RH_LIGHTWELL_USER}</username>
+      <password>${env.RH_LIGHTWELL_TOKEN}</password>
     </server>
   </servers>
 

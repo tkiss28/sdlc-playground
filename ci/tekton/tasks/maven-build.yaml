@@ -35,12 +35,12 @@ spec:
       # redhat-lightwell-creds and are expanded by Maven via ${env.VAR} in
       # settings.xml. They never touch the ConfigMap.
       env:
-        - name: REDHAT_LIGHTWELL_USERNAME
+        - name: RH_LIGHTWELL_USER
           valueFrom:
             secretKeyRef:
               name: redhat-lightwell-creds
               key: username
-        - name: REDHAT_LIGHTWELL_TOKEN
+        - name: RH_LIGHTWELL_TOKEN
           valueFrom:
             secretKeyRef:
               name: redhat-lightwell-creds
