@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# App-of-apps: the root Application renders these child Applications.
+# Sync ordering is controlled per-Application via argocd.argoproj.io/sync-wave:
+#   petclinic-db  (wave 0)  -> database up first
+#   petclinic     (wave 1)  -> app; its own PreSync hook verifies the image signature
+resources:
+  - petclinic-db/application.yaml
+  - petclinic/application.yaml

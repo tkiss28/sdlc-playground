@@ -1,0 +1,49 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-clone
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  description: >-
+    Minimal, self-contained git clone (no external task bundles). Clones the app
+    repo into the `source` workspace and emits the url/commit results that Tekton
+    Chains consumes for provenance.
+  params:
+    - name: url
+      type: string
+      description: Repository URL to clone (the spring-petclinic fork).
+    - name: revision
+      type: string
+      description: Branch, tag or SHA to check out.
+      default: main
+    - name: subdirectory
+      type: string
+      description: Subdirectory inside the workspace to clone into.
+      default: ""
+  workspaces:
+    - name: source
+      description: Where the repo is cloned.
+  results:
+    - name: commit
+      description: The precise commit SHA that was checked out.
+    - name: url
+      description: The repository URL that was cloned.
+  steps:
+    - name: clone
+      image: registry.access.redhat.com/ubi9/toolbox:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        TARGET="$(workspaces.source.path)/$(params.subdirectory)"
+        mkdir -p "${TARGET}"
+        cd "${TARGET}"
+        git init -q
+        git remote add origin "$(params.url)"
+        git fetch -q --depth 1 origin "$(params.revision)"
+        git checkout -q FETCH_HEAD
+        RESOLVED="$(git rev-parse HEAD)"
+        printf '%s' "${RESOLVED}" > "$(results.commit.path)"
+        printf '%s' "$(params.url)" > "$(results.url.path)"
+        echo "Checked out $(params.url)@${RESOLVED}"

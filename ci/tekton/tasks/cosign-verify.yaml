@@ -1,0 +1,54 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cosign-verify
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  description: >-
+    Verify an image's cosign signature and its CycloneDX SBOM attestation against
+    the public key. Used for manual/CI verification; the SAME command runs in the
+    ArgoCD PreSync deploy gate (gitops/base/.../verify-gate). Fails (non-zero) if
+    the artifact is unsigned or the attestation is missing — the supply-chain gate.
+  params:
+    - name: IMAGE
+      type: string
+      description: Image ref to verify (prefer IMAGE@sha256:... by digest).
+    - name: TLSVERIFY
+      type: string
+      default: "true"
+  steps:
+    - name: verify
+      image: registry.redhat.io/rhtas/cosign-rhel9:latest
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        INSECURE=$( [ "$(params.TLSVERIFY)" = "false" ] && echo true || echo false )
+
+        echo "== Verifying image signature =="
+        cosign verify \
+          --insecure-ignore-tlog=true \
+          --allow-insecure-registry=${INSECURE} \
+          --key /signing/cosign.pub \
+          "$(params.IMAGE)"
+
+        echo "== Verifying CycloneDX SBOM attestation =="
+        cosign verify-attestation \
+          --insecure-ignore-tlog=true \
+          --allow-insecure-registry=${INSECURE} \
+          --key /signing/cosign.pub \
+          --type cyclonedx \
+          "$(params.IMAGE)"
+
+        echo "OK: image is signed and SBOM-attested."
+      volumeMounts:
+        - name: signing
+          mountPath: /signing
+          readOnly: true
+  volumes:
+    - name: signing
+      secret:
+        secretName: signing-secrets
+        items:
+          - key: cosign.pub
+            path: cosign.pub

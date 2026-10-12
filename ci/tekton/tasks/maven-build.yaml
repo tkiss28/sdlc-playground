@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: maven-build
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  description: >-
+    Authoritative Maven build. Runs `mvn verify` with the Lightwell settings.xml
+    so that org.aspectj:* resolves from the Red Hat Lightwell repository, runs the
+    tests, and produces both the Spring Boot fat jar and the CycloneDX SBOM
+    (target/bom.json via the cyclonedx-maven-plugin already configured in pom.xml).
+  params:
+    - name: subdirectory
+      type: string
+      description: Path within the source workspace that holds pom.xml.
+      default: ""
+    - name: goals
+      type: string
+      description: Maven goals/flags to run.
+      default: "-B -DskipTests=false clean verify"
+  workspaces:
+    - name: source
+      description: Cloned app source; also holds the persisted .m2 cache.
+    - name: maven-settings
+      description: ConfigMap-backed workspace providing settings.xml.
+  results:
+    - name: sbom-path
+      description: Workspace-relative path to the generated CycloneDX SBOM.
+  steps:
+    - name: build
+      image: registry.access.redhat.com/ubi9/openjdk-17:latest
+      workingDir: $(workspaces.source.path)/$(params.subdirectory)
+      # Credentials for the Lightwell <server> come from the Secret
+      # redhat-lightwell-creds and are expanded by Maven via ${env.VAR} in
+      # settings.xml. They never touch the ConfigMap.
+      env:
+        - name: REDHAT_LIGHTWELL_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: redhat-lightwell-creds
+              key: username
+        - name: REDHAT_LIGHTWELL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: redhat-lightwell-creds
+              key: token
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        ./mvnw -s "$(workspaces.maven-settings.path)/settings.xml" $(params.goals)
+
+        # Record where the SBOM landed for the downstream attest step.
+        SBOM="$(params.subdirectory)/target/bom.json"
+        SBOM="${SBOM#/}"
+        printf '%s' "${SBOM}" > "$(results.sbom-path.path)"
+
+        echo "=== Proof: where did aspectjweaver come from? ==="
+        find "$(workspaces.source.path)" -path '*org/aspectj/aspectjweaver/1.9.25.1/_remote.repositories' \
+          -exec cat {} \; || echo "(_remote.repositories not found — check settings.xml lightwell-validated repository)"

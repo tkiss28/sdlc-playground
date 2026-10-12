@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CLUSTER-SIDE settings.xml template used by the Tekton maven-build task.
+
+  This file is rendered into a ConfigMap (non-secret parts) while the credentials
+  come from the Secret `redhat-lightwell-creds` and are injected as the env vars
+  REDHAT_LIGHTWELL_USERNAME / REDHAT_LIGHTWELL_TOKEN on the maven step (see
+  ci/tekton/tasks/maven-build.yaml). Maven expands ${env.VAR} at runtime, so no
+  secret material is ever stored in the ConfigMap.
+
+  Resolution model (per Red Hat Lightwell Network docs): a <profiles> profile
+  declares the validated-tier repository via <repositories> and is turned on by
+  <activeProfiles>; a matching <servers> entry — whose <id> MUST equal the
+  repository <id> (lightwell-validated) — attaches the Basic-auth credentials.
+  This is NOT a <mirror>/mirrorOf setup: Maven Central still follows as the
+  fallback repository per Red Hat's model. These settings are SELF-CONTAINED —
+  the repository is declared here, so petclinic's pom.xml stays vanilla and does
+  not need to declare the repository itself.
+
+  Create the ConfigMap (non-secret) from this template:
+    `oc create configmap maven-settings` in namespace petclinic, with
+    from-file settings.xml=ci/maven/settings.xml.template.
+
+  Create the credentials Secret (values supplied by you — see docs):
+    `oc create secret generic redhat-lightwell-creds` in namespace petclinic,
+    with from-literal keys username=<user> and token=<token>.
+
+  The exact, runnable forms of both commands live in bootstrap/bootstrap.sh
+  (kept there verbatim; an XML comment may not contain a literal double hyphen,
+  so the full option flags are not reproduced inline here).
+
+  <localRepository> points at the shared workspace PVC so the .m2 cache persists
+  between PipelineRuns.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <localRepository>/workspace/source/.m2/repository</localRepository>
+
+  <servers>
+    <!-- The <server> id MUST match the <repository> id below (lightwell-validated). -->
+    <server>
+      <id>lightwell-validated</id>
+      <username>${env.REDHAT_LIGHTWELL_USERNAME}</username>
+      <password>${env.REDHAT_LIGHTWELL_TOKEN}</password>
+    </server>
+  </servers>
+
+  <profiles>
+    <profile>
+      <id>lightwell</id>
+      <repositories>
+        <!-- Validated tier. Credentials come from the matching <server> above. -->
+        <repository>
+          <id>lightwell-validated</id>
+          <name>Red Hat Lightwell Network (validated)</name>
+          <url>https://packages.redhat.com/lightwell/java/validated/</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>lightwell</activeProfile>
+  </activeProfiles>
+
+</settings>

@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: buildah
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  description: >-
+    Build the runtime image from the prebuilt jar in the source workspace and push
+    it to the registry. Emits IMAGE_URL and IMAGE_DIGEST — the exact result names
+    Tekton Chains watches to sign the image and record SLSA provenance.
+  params:
+    - name: IMAGE
+      type: string
+      description: Fully qualified image ref to build and push (tag).
+    - name: CONTAINERFILE
+      type: string
+      description: Path to the Containerfile, relative to the build context.
+      default: ./Containerfile
+    - name: CONTEXT
+      type: string
+      description: Build context dir within the source workspace.
+      default: .
+    - name: TLSVERIFY
+      type: string
+      description: Verify registry TLS. Set "false" for the insecure CRC internal route.
+      default: "true"
+  workspaces:
+    - name: source
+  results:
+    - name: IMAGE_URL
+      description: The pushed image reference.
+    - name: IMAGE_DIGEST
+      description: The digest of the pushed image.
+  steps:
+    - name: build-and-push
+      image: registry.redhat.io/rhel9/buildah:latest
+      workingDir: $(workspaces.source.path)
+      securityContext:
+        capabilities:
+          add: ["SETFCAP"]
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        buildah --storage-driver=vfs bud \
+          --tls-verify=$(params.TLSVERIFY) \
+          --format=oci \
+          -f "$(params.CONTEXT)/$(params.CONTAINERFILE)" \
+          -t "$(params.IMAGE)" \
+          "$(params.CONTEXT)"
+
+        buildah --storage-driver=vfs push \
+          --tls-verify=$(params.TLSVERIFY) \
+          --digestfile /tmp/image-digest \
+          "$(params.IMAGE)" \
+          "docker://$(params.IMAGE)"
+
+        printf '%s' "$(params.IMAGE)" > "$(results.IMAGE_URL.path)"
+        printf '%s' "$(cat /tmp/image-digest)" > "$(results.IMAGE_DIGEST.path)"
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+  volumes:
+    - name: varlibcontainers
+      emptyDir: {}

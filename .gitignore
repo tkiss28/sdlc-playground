@@ -1,0 +1,9 @@
+# env file
+.env
+
+# Editor/IDE
+ .vscode/
+/.idea/
+
+.ai/
+.opencode.json

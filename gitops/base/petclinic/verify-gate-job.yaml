@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: petclinic-verify-gate
+  labels:
+    app: petclinic
+  annotations:
+    # ArgoCD PreSync hook: runs BEFORE petclinic's Deployment/Service/Route sync.
+    # If cosign verification fails, the hook fails and the rollout is blocked.
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: petclinic
+    spec:
+      restartPolicy: Never
+      serviceAccountName: pipeline-sa
+      containers:
+        - name: cosign-verify
+          image: registry.redhat.io/rhtas/cosign-rhel9:latest
+          # The `image` field below is patched to the signed digest by the overlay
+          # `images:` transformer, so we verify exactly what will be deployed.
+          # We read the ref from the downward-injected env written at render time.
+          env:
+            - name: IMAGE
+              # Overlay replaces this placeholder ref with the pinned digest.
+              value: petclinic-image
+            - name: REGISTRY_AUTH_FILE
+              value: /auth/.dockerconfigjson
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              echo "== Verifying image signature: ${IMAGE} =="
+              cosign verify \
+                --insecure-ignore-tlog=true \
+                --allow-insecure-registry=true \
+                --key /signing/cosign.pub \
+                "${IMAGE}"
+              echo "== Verifying CycloneDX SBOM attestation =="
+              cosign verify-attestation \
+                --insecure-ignore-tlog=true \
+                --allow-insecure-registry=true \
+                --key /signing/cosign.pub \
+                --type cyclonedx \
+                "${IMAGE}"
+              echo "GATE PASSED: image is signed and SBOM-attested."
+          volumeMounts:
+            - name: signing
+              mountPath: /signing
+              readOnly: true
+            - name: registry-auth
+              mountPath: /auth
+              readOnly: true
+      volumes:
+        - name: signing
+          secret:
+            secretName: signing-secrets
+            items:
+              - key: cosign.pub
+                path: cosign.pub
+        - name: registry-auth
+          secret:
+            # Created by bootstrap.sh from the pipeline-sa pull credentials so the
+            # gate can read image manifests/signatures from the internal registry.
+            secretName: registry-auth

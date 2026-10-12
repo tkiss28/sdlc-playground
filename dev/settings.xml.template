@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LOCAL DEVELOPER settings.xml template for building spring-petclinic against the
+  Red Hat Lightwell validated Maven repository.
+
+  Usage:
+    1. cp dev/settings.xml.template ~/.m2/settings.xml
+    2. Fill in REDHAT_LIGHTWELL_USERNAME / REDHAT_LIGHTWELL_TOKEN below
+       (or export them as env vars; Maven expands ${env.VAR}).
+    3. Build with a clean local repo to PROVE provenance:
+         ./mvnw -Dmaven.repo.local=$(mktemp -d) -DskipTests clean verify
+       then inspect  <repo>/org/aspectj/aspectjweaver/1.9.25.1/_remote.repositories
+       — it must list  lightwell-validated .
+
+  Resolution model (per Red Hat Lightwell Network docs): the <profiles> profile
+  below declares the validated-tier repository via <repositories> and is enabled
+  by <activeProfiles>; the <servers> entry — whose <id> MUST equal the repository
+  <id> (lightwell-validated) — attaches the Basic-auth credentials. This is NOT a
+  <mirror>/mirrorOf setup: Maven Central still follows as the fallback repository
+  per Red Hat's model. These settings are SELF-CONTAINED — the repository is
+  declared here, so petclinic's pom.xml stays vanilla.
+
+  SECURITY: never commit a filled-in settings.xml. Keep credentials in env vars
+  or a secret manager. This file is a template only.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <servers>
+    <!-- The <server> id MUST match the <repository> id below (lightwell-validated). -->
+    <server>
+      <id>lightwell-validated</id>
+      <username>${env.REDHAT_LIGHTWELL_USERNAME}</username>
+      <password>${env.REDHAT_LIGHTWELL_TOKEN}</password>
+    </server>
+  </servers>
+
+  <profiles>
+    <profile>
+      <id>lightwell</id>
+      <repositories>
+        <!-- Validated tier. Credentials come from the matching <server> above. -->
+        <repository>
+          <id>lightwell-validated</id>
+          <name>Red Hat Lightwell Network (validated)</name>
+          <url>https://packages.redhat.com/lightwell/java/validated/</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+    </profile>
+  </profiles>
+
+  <activeProfiles>
+    <activeProfile>lightwell</activeProfile>
+  </activeProfiles>
+
+</settings>

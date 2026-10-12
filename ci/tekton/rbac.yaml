@@ -1,0 +1,43 @@
+---
+# Service account the pipeline runs as.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pipeline-sa
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+---
+# Allow the pipeline SA to push to the in-cluster OpenShift registry.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-sa-image-builder
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-builder
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+    namespace: petclinic
+---
+# Minimal permissions so the SA can manage its own build pods/pvcs if needed.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-sa-edit
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+    namespace: petclinic

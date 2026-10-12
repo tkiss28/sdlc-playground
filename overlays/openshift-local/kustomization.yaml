@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: petclinic
+
+resources:
+  - ../../gitops/base/petclinic
+
+# -----------------------------------------------------------------------------
+# Pin the deployed image BY DIGEST. This is the artifact the pipeline built,
+# Chains signed, and the PreSync gate verifies. Update `digest` after each build:
+#
+#   oc -n petclinic get pipelinerun <run> -o jsonpath='{.status.results}'
+#   # -> take IMAGE_DIGEST (sha256:...) and paste below.
+#
+# Do NOT use a tag here — signed==deployed only holds for a digest.
+# -----------------------------------------------------------------------------
+images:
+  - name: petclinic-image
+    newName: image-registry.openshift-image-registry.svc:5000/petclinic/petclinic
+    digest: sha256:REPLACE_WITH_BUILT_DIGEST
+
+# Copy the pinned image ref into the verify-gate Job's IMAGE env var so the gate
+# verifies exactly what the Deployment runs (kustomize images: does not patch env
+# values, so we mirror it with a replacement sourced from the Deployment).
+replacements:
+  - source:
+      kind: Deployment
+      name: petclinic
+      fieldPath: spec.template.spec.containers.[name=workload].image
+    targets:
+      - select:
+          kind: Job
+          name: petclinic-verify-gate
+        fieldPaths:
+          - spec.template.spec.containers.[name=cosign-verify].env.[name=IMAGE].value

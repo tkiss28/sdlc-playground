@@ -1,0 +1,157 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provenance-verify
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  description: >-
+    Supply-chain gate for the RHLN-sourced Java artifacts. After maven-build has
+    resolved them into the shared .m2 cache, this task verifies each target
+    artifact's SLSA provenance attestation (signed by "PNC Provenance Signing Key
+    1") with Cosign. The sibling bundle
+    <artifactId>-<version>.provenance.sigstore.json lives in the SAME Maven
+    coordinate directory on the Lightwell validated-tier server but is NOT fetched
+    by Maven, so step 1 downloads it (Basic auth) and step 2 runs cosign. Fails
+    (non-zero) if any target's bundle is missing or does not verify — so a
+    provenance failure blocks the downstream image build.
+  params:
+    - name: artifacts
+      type: string
+      description: >-
+        Newline- or space-separated list of Maven GAV coordinates
+        (groupId:artifactId:version) to gate.
+      default: |
+        org.aspectj:aspectjweaver:1.9.25.1
+        org.springframework:spring-aop:7.0.8
+  workspaces:
+    - name: source
+      description: Shared workspace holding the .m2 cache at /workspace/source/.m2/repository.
+  steps:
+    # -----------------------------------------------------------------------
+    # Step 1: download each artifact's provenance bundle from the validated
+    # tier (same Basic creds as maven-build) into a shared emptyDir.
+    # -----------------------------------------------------------------------
+    - name: fetch-bundles
+      image: registry.access.redhat.com/ubi9/ubi:latest
+      # Credentials come from the Secret redhat-lightwell-creds, same pattern as
+      # maven-build.yaml. The public key is NOT secret (ConfigMap, step 2).
+      env:
+        - name: REDHAT_LIGHTWELL_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: redhat-lightwell-creds
+              key: username
+        - name: REDHAT_LIGHTWELL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: redhat-lightwell-creds
+              key: token
+      volumeMounts:
+        - name: bundles
+          mountPath: /bundles
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        BASE_URL="https://packages.redhat.com/lightwell/java/validated"
+        M2="$(workspaces.source.path)/.m2/repository"
+
+        rc=0
+        for GAV in $(params.artifacts); do
+          [ -z "${GAV}" ] && continue
+          GROUP="${GAV%%:*}"
+          REST="${GAV#*:}"
+          ARTIFACT="${REST%%:*}"
+          VERSION="${REST#*:}"
+          GROUP_PATH="${GROUP//.//}"
+
+          BUNDLE="${ARTIFACT}-${VERSION}.provenance.sigstore.json"
+          JAR="${M2}/${GROUP_PATH}/${ARTIFACT}/${VERSION}/${ARTIFACT}-${VERSION}.jar"
+          URL="${BASE_URL}/${GROUP_PATH}/${ARTIFACT}/${VERSION}/${BUNDLE}"
+
+          echo "== ${GAV} =="
+          if [ ! -f "${JAR}" ]; then
+            echo "FAIL: jar not found in local .m2 cache: ${JAR}"
+            rc=1
+            continue
+          fi
+
+          echo "downloading ${URL}"
+          if ! curl -fsSL -u "${REDHAT_LIGHTWELL_USERNAME}:${REDHAT_LIGHTWELL_TOKEN}" \
+                 -o "/bundles/${BUNDLE}" "${URL}"; then
+            echo "FAIL: could not download provenance bundle ${BUNDLE}"
+            rc=1
+            continue
+          fi
+          echo "ok: /bundles/${BUNDLE}"
+        done
+        exit "${rc}"
+    # -----------------------------------------------------------------------
+    # Step 2: cosign verify-blob-attestation for each artifact against the
+    # downloaded bundle and the PNC public key. Hard gate.
+    # -----------------------------------------------------------------------
+    - name: verify
+      image: registry.redhat.io/rhtas/cosign-rhel9:latest
+      volumeMounts:
+        - name: bundles
+          mountPath: /bundles
+        - name: pnc-key
+          mountPath: /keys
+          readOnly: true
+      script: |
+        #!/usr/bin/env bash
+        set -uo pipefail
+
+        KEY="/keys/pnc-provenance-signing-key-1.pub"
+        M2="$(workspaces.source.path)/.m2/repository"
+
+        declare -a RESULTS=()
+        fail=0
+        for GAV in $(params.artifacts); do
+          [ -z "${GAV}" ] && continue
+          GROUP="${GAV%%:*}"
+          REST="${GAV#*:}"
+          ARTIFACT="${REST%%:*}"
+          VERSION="${REST#*:}"
+          GROUP_PATH="${GROUP//.//}"
+
+          BUNDLE="/bundles/${ARTIFACT}-${VERSION}.provenance.sigstore.json"
+          JAR="${M2}/${GROUP_PATH}/${ARTIFACT}/${VERSION}/${ARTIFACT}-${VERSION}.jar"
+
+          echo "== Verifying provenance for ${GAV} =="
+          if cosign verify-blob-attestation \
+               --type https://slsa.dev/provenance/v1 \
+               --key "${KEY}" \
+               --bundle "${BUNDLE}" \
+               "${JAR}"; then
+            RESULTS+=("PASS ${GAV}")
+          else
+            RESULTS+=("FAIL ${GAV}")
+            fail=1
+          fi
+        done
+
+        echo ""
+        echo "===== provenance-verify summary ====="
+        for r in "${RESULTS[@]}"; do echo "  ${r}"; done
+        echo "====================================="
+
+        if [ "${fail}" -ne 0 ]; then
+          echo "GATE FAILED: one or more artifacts failed SLSA provenance verification."
+          exit 1
+        fi
+        echo "GATE PASSED: all target artifacts have verified SLSA provenance."
+  volumes:
+    # Shared between the two steps: holds the downloaded provenance bundles.
+    - name: bundles
+      emptyDir: {}
+    # Public key for "PNC Provenance Signing Key 1" (non-secret).
+    #   oc create configmap pnc-provenance-key -n petclinic \
+    #     --from-file=pnc-provenance-signing-key-1.pub=ci/tekton/keys/pnc-provenance-signing-key-1.pub
+    - name: pnc-key
+      configMap:
+        name: pnc-provenance-key
+        items:
+          - key: pnc-provenance-signing-key-1.pub
+            path: pnc-provenance-signing-key-1.pub

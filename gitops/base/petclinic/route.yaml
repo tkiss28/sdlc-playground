@@ -1,0 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: petclinic
+  labels:
+    app: petclinic
+spec:
+  # CRC apps wildcard domain. Adapted from dcm-computate openshift-local route.
+  host: petclinic.apps-crc.testing
+  to:
+    kind: Service
+    name: petclinic
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

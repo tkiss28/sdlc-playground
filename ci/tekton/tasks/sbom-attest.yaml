@@ -1,0 +1,62 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: sbom-attest
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  description: >-
+    Attach the CycloneDX SBOM to the image as a signed cosign attestation
+    (predicate type cyclonedx). This complements the SLSA provenance that Tekton
+    Chains produces automatically, giving a verifiable "what's inside" record.
+  params:
+    - name: IMAGE
+      type: string
+      description: Image ref (by tag or digest) to attest.
+    - name: IMAGE_DIGEST
+      type: string
+      description: The image digest produced by the buildah task.
+    - name: SBOM_PATH
+      type: string
+      description: Workspace-relative path to the CycloneDX SBOM.
+    - name: TLSVERIFY
+      type: string
+      default: "true"
+  workspaces:
+    - name: source
+  steps:
+    - name: attest
+      image: registry.redhat.io/rhtas/cosign-rhel9:latest
+      workingDir: $(workspaces.source.path)
+      # Reuse the same cosign signing key that Chains uses, mounted from the
+      # signing-secrets Secret (see rbac.yaml / bootstrap.sh).
+      env:
+        - name: COSIGN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: signing-secrets
+              key: cosign.password
+              optional: true
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        REF="$(params.IMAGE)@$(params.IMAGE_DIGEST)"
+        echo "Attesting CycloneDX SBOM to ${REF}"
+        cosign attest --yes \
+          --tlog-upload=false \
+          --allow-insecure-registry=$( [ "$(params.TLSVERIFY)" = "false" ] && echo true || echo false ) \
+          --key /signing/cosign.key \
+          --type cyclonedx \
+          --predicate "$(params.SBOM_PATH)" \
+          "${REF}"
+      volumeMounts:
+        - name: signing
+          mountPath: /signing
+          readOnly: true
+  volumes:
+    - name: signing
+      secret:
+        secretName: signing-secrets
+        items:
+          - key: cosign.key
+            path: cosign.key

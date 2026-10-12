@@ -1,0 +1,43 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  # Use `oc create -f` (not apply) so a fresh run name is generated each time.
+  generateName: petclinic-build-
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+spec:
+  pipelineRef:
+    name: petclinic-build
+  taskRunTemplate:
+    serviceAccountName: pipeline-sa
+  params:
+    # EDIT: point at YOUR spring-petclinic fork.
+    - name: git-url
+      value: https://github.com/tkiss28/spring-petclinic.git
+    - name: git-revision
+      value: main
+    # CRC internal registry (exposed via defaultRoute). For quay.io, replace with
+    # quay.io/<org>/petclinic:latest and set tls-verify "true".
+    - name: image
+      value: image-registry.openshift-image-registry.svc:5000/petclinic/petclinic:latest
+    - name: tls-verify
+      value: "false"
+  # NOTE: the provenance-verify task mounts the `pnc-provenance-key` ConfigMap
+  # (PNC public key) directly in its own volumes, so no extra workspace binding is
+  # needed here — just ensure the ConfigMap exists in this namespace:
+  #   oc create configmap pnc-provenance-key -n petclinic \
+  #     --from-file=pnc-provenance-signing-key-1.pub=ci/tekton/keys/pnc-provenance-signing-key-1.pub
+  workspaces:
+    - name: shared
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    - name: maven-settings
+      configMap:
+        name: maven-settings
+  timeouts:
+    pipeline: "1h0m0s"
