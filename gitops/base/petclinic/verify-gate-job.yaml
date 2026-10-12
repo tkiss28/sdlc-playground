@@ -20,7 +20,7 @@ spec:
       serviceAccountName: pipeline-sa
       containers:
         - name: cosign-verify
-          image: registry.redhat.io/rhtas/cosign-rhel9:latest
+          image: registry.redhat.io/rhtas/cosign-rhel9:1.3.4
           # The `image` field below is patched to the signed digest by the overlay
           # `images:` transformer, so we verify exactly what will be deployed.
           # We read the ref from the downward-injected env written at render time.
