@@ -53,13 +53,31 @@ Create a service account on
 to use as `RH_LIGHTWELL_USER` `RH_LIGHTWELL_TOKEN` environment
 variables.
 
+### Fork and retarget the repos
+
+Both repos reference a GitHub owner that defaults to `tkiss28`. Fork **both**
+`sdlc-playground` and your `spring-petclinic` fork under your own account, then
+point this clone at your forks before bootstrapping:
+
+```bash
+# from the sdlc-playground checkout, replace the owner in every manifest:
+grep -rl tkiss28 . | xargs sed -i 's/tkiss28/<your-github-user>/g'
+git commit -am "Retarget repoURLs to my forks" && git push
+```
+
+This updates the ArgoCD `repoURL`s and the Tekton `git-url`
+(`gitops/bootstrap/root-application.yaml`, `gitops/applications/*/application.yaml`,
+`ci/tekton/pipelinerun.yaml`). ArgoCD syncs from the **remote** repo, so these
+must be pushed — not just changed locally. Also push your `spring-petclinic` fork
+with its `Containerfile` and `ci/maven/*` on `main`, since the pipeline clones it.
+
 ### Tekton CLI
 
 ```
-# Get the tar.xz
-curl -LO https://github.com/tektoncd/cli/releases/download/v0.46.0/tkn_0.46.0_Darwin_all.tar.gz
+# Linux x86_64 (matches the CRC setup below). For macOS use tkn_0.46.0_Darwin_all.tar.gz.
+curl -LO https://github.com/tektoncd/cli/releases/download/v0.46.0/tkn_0.46.0_Linux_x86_64.tar.gz
 # Extract tkn to your PATH (e.g. /usr/local/bin)
-sudo tar xvzf tkn_0.46.0_Darwin_all.tar.gz -C /usr/local/bin tkn
+sudo tar xvzf tkn_0.46.0_Linux_x86_64.tar.gz -C /usr/local/bin tkn
 ```
 
 ### CRC setup
@@ -107,14 +125,19 @@ oc whoami                                      # should print kube:admin
 ## Quick start
 
 ```bash
-# prereqs on PATH: crc, oc, cosign  (and a running/startable CRC)
+# prereqs on PATH: crc, oc, cosign, tkn  (and a running CRC you're logged into as kubeadmin)
+# make sure you've forked + retargeted the repos first (see "Fork and retarget" above)
 export RH_LIGHTWELL_USER=... RH_LIGHTWELL_TOKEN=...
 ./bootstrap/bootstrap.sh
 ```
 
-Then follow the "Next" steps printed by the script (fill in your fork URLs, run
-a PipelineRun, paste the built digest into the overlay). Full proof procedure:
-[`docs/verification.md`](docs/verification.md).
+Bootstrap validates your Lightwell token up front and fails fast with a clear
+message if it's unset/expired, so you find out immediately — not three stages
+into a build.
+
+Then follow the "Next" steps printed by the script (run a PipelineRun, paste the
+built digest into `overlays/openshift-local/kustomization.yaml`, commit/push).
+Full proof procedure: [`docs/verification.md`](docs/verification.md).
 
 ## Security model (from day one)
 
@@ -126,9 +149,21 @@ a PipelineRun, paste the built digest into the overlay). Full proof procedure:
 - **Logged:** Chains records attestations in the registry (OCI). Public Rekor is
   off by default (no egress needed on CRC); flip `transparency.enabled` to use
   it.
+- **Dependency provenance:** `provenance-verify` checks the SLSA provenance of the
+  validated artifacts (`aspectjweaver`, `spring-aop`) against the published **PNC
+  Provenance Signing Key 1** (`ci/tekton/keys/pnc-provenance-signing-key-1.pub` —
+  Red Hat's public key, committed as-is; no placeholder to fill in).
+
+## Lightwell auth (resolved)
+
+Basic auth with a service-account token (username format `XXXXXXX|service-account`).
+The gotcha: the endpoint returns **403 (not 401)** to anonymous requests, so
+Maven's default *reactive* auth never sends the token and silently falls back to
+Maven Central (defeating the validated-source guarantee). The build therefore
+forces **preemptive** auth with `-Daether.connector.http.preemptiveAuth=true`
+(`ci/tekton/tasks/maven-build.yaml`). Both bootstrap and `maven-build` probe the
+token first and fail fast if it's missing/expired.
 
 ## Known open items
 
-See the Risks section of the plan and `docs/`. Biggest: the auth scheme for the
-Red Hat Lightwell repo (token vs basic) — modeled here as a username/token
-Secret.
+See the Risks section of the plan and `docs/`.
