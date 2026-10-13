@@ -47,6 +47,14 @@ spec:
             secretKeyRef:
               name: redhat-lightwell-creds
               key: token
+        # Writable HOME for the arbitrary non-root UID (cred copy / curl netrc).
+        - name: HOME
+          value: /tekton/home
+        # Pass the (possibly multi-line) artifact list via env, NOT inline in the
+        # script: Tekton textually substitutes $(params.x) everywhere — even inside
+        # comments — so a multi-line value in the script body breaks bash.
+        - name: ARTIFACTS
+          value: $(params.artifacts)
       volumeMounts:
         - name: bundles
           mountPath: /bundles
@@ -58,7 +66,7 @@ spec:
         M2="$(workspaces.source.path)/.m2/repository"
 
         rc=0
-        for GAV in $(params.artifacts); do
+        for GAV in ${ARTIFACTS}; do
           [ -z "${GAV}" ] && continue
           GROUP="${GAV%%:*}"
           REST="${GAV#*:}"
@@ -93,6 +101,13 @@ spec:
     # -----------------------------------------------------------------------
     - name: verify
       image: registry.redhat.io/rhtas/cosign-rhel9:1.3.4
+      env:
+        # Writable HOME for the arbitrary non-root UID (cosign config / cred copy).
+        - name: HOME
+          value: /tekton/home
+        # Multi-line-safe: see fetch-bundles. Never inline $(params.x) in a script.
+        - name: ARTIFACTS
+          value: $(params.artifacts)
       volumeMounts:
         - name: bundles
           mountPath: /bundles
@@ -108,7 +123,7 @@ spec:
 
         declare -a RESULTS=()
         fail=0
-        for GAV in $(params.artifacts); do
+        for GAV in ${ARTIFACTS}; do
           [ -z "${GAV}" ] && continue
           GROUP="${GAV%%:*}"
           REST="${GAV#*:}"

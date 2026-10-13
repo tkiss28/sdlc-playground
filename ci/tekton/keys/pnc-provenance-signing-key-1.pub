@@ -1,18 +1,4 @@
-# TODO: REPLACE THIS PLACEHOLDER.
-#
-# This is NOT a real key. Paste the real "PNC Provenance Signing Key 1"
-# EC P-256 public key from the Red Hat Lightwell Network documentation
-# (https://docs.redhat.com/en/documentation/lightwell_network) here,
-# replacing this entire file. The real key is a PEM block that begins with:
-#
-#   -----BEGIN PUBLIC KEY-----
-#   ...base64 EC P-256 public key bytes...
-#   -----END PUBLIC KEY-----
-#
-# Then (re)create the ConfigMap consumed by the provenance-verify task:
-#
-#   oc create configmap pnc-provenance-key -n petclinic \
-#     --from-file=pnc-provenance-signing-key-1.pub=ci/tekton/keys/pnc-provenance-signing-key-1.pub
-#
-# cosign will fail to load this placeholder, which (correctly) keeps the
-# provenance gate red until the real key is installed.
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYFyYXLNpOXF46lNdwKgOthCsOZ0W
+5Uc29eO5IQzw2PKVkdpb781AZ/sUh7dSpe3hjjTu2brbjtOH1FWhO2Mmrg==
+-----END PUBLIC KEY-----

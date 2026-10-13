@@ -27,9 +27,18 @@ log() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- 0. preflight -------------------------------------------------------------
-for bin in oc cosign; do command -v "$bin" >/dev/null || die "missing required binary: $bin"; done
+for bin in oc cosign curl; do command -v "$bin" >/dev/null || die "missing required binary: $bin"; done
 : "${RH_LIGHTWELL_USER:?set RH_LIGHTWELL_USER}"
 : "${RH_LIGHTWELL_TOKEN:?set RH_LIGHTWELL_TOKEN}"
+
+# Validate the Lightwell token NOW (fail early, clear message). A bad/expired
+# token does not error the build — Maven silently falls back to Maven Central —
+# so catch it here before standing anything up.
+log "Validating Red Hat Lightwell credentials"
+_lw_probe="https://packages.redhat.com/lightwell/java/validated/org/springframework/spring-aop/7.0.8/spring-aop-7.0.8.pom"
+_lw_code="$(curl -s -o /dev/null -w '%{http_code}' -u "${RH_LIGHTWELL_USER}:${RH_LIGHTWELL_TOKEN}" "${_lw_probe}" || echo 000)"
+[ "${_lw_code}" = "200" ] || die "Lightwell auth check failed (HTTP ${_lw_code}) as '${RH_LIGHTWELL_USER}'. Check RH_LIGHTWELL_USER/RH_LIGHTWELL_TOKEN (unset? expired? wrong account?)."
+printf '  OK (HTTP 200)\n'
 
 # --- 1. CRC (optional; skip if already logged in) -----------------------------
 if ! oc whoami >/dev/null 2>&1; then
@@ -76,6 +85,17 @@ done
 echo
 oc rollout status deployment/openshift-gitops-server -n "${GITOPS_NS}" --timeout=300s || true
 
+# CRDs appear BEFORE the Tekton webhook pods are serving. Creating a Task/Pipeline
+# invokes the defaulting admission webhook, so applying ci/tekton/* too early fails
+# with "no endpoints available for service tekton-pipelines-webhook". Wait for the
+# webhook deployment to exist, roll out, and have live endpoints before step 4.
+log "Waiting for the Tekton pipelines webhook to be ready"
+until oc get deploy tekton-pipelines-webhook -n "${PIPELINES_NS}" >/dev/null 2>&1; do sleep 5; printf '.'; done
+oc rollout status deploy/tekton-pipelines-webhook -n "${PIPELINES_NS}" --timeout=300s
+until [ -n "$(oc get endpoints tekton-pipelines-webhook -n "${PIPELINES_NS}" \
+        -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)" ]; do sleep 5; printf '.'; done
+echo
+
 # --- 3. expose internal registry ---------------------------------------------
 log "Exposing the internal image registry (defaultRoute)"
 oc patch configs.imageregistry.operator.openshift.io/cluster --type merge \
@@ -84,10 +104,10 @@ oc patch configs.imageregistry.operator.openshift.io/cluster --type merge \
 # --- 4. namespace + RBAC + tekton resources -----------------------------------
 log "Creating namespace ${APP_NS} and applying Tekton RBAC/tasks/pipeline"
 oc create namespace "${APP_NS}" --dry-run=client -o yaml | oc apply -f -
-oc apply -f "${REPO_ROOT}/ci/tekton/rbac.yaml"
+oc apply -f "${REPO_ROOT}/ci/tekton/rbac.yaml" -n "${APP_NS}"
 oc apply -f "${REPO_ROOT}/ci/tekton/workspace-pvc.yaml" -n "${APP_NS}"
-oc apply -f "${REPO_ROOT}/ci/tekton/tasks/"
-oc apply -f "${REPO_ROOT}/ci/tekton/pipeline.yaml"
+oc apply -f "${REPO_ROOT}/ci/tekton/tasks/" -n "${APP_NS}"
+oc apply -f "${REPO_ROOT}/ci/tekton/pipeline.yaml" -n "${APP_NS}"
 
 # --- 5. Red Hat Lightwell credentials + maven settings ------------------------
 log "Creating Red Hat Lightwell credentials secret + maven-settings ConfigMap"
@@ -97,6 +117,12 @@ oc create secret generic redhat-lightwell-creds -n "${APP_NS}" \
   --dry-run=client -o yaml | oc apply -f -
 oc create configmap maven-settings -n "${APP_NS}" \
   --from-file=settings.xml="${REPO_ROOT}/ci/maven/settings.xml.template" \
+  --dry-run=client -o yaml | oc apply -f -
+# PNC provenance public key — mounted by the provenance-verify task. Without this
+# ConfigMap that task's pod hangs in Pending (missing volume) until the pipeline
+# times out.
+oc create configmap pnc-provenance-key -n "${APP_NS}" \
+  --from-file=pnc-provenance-signing-key-1.pub="${REPO_ROOT}/ci/tekton/keys/pnc-provenance-signing-key-1.pub" \
   --dry-run=client -o yaml | oc apply -f -
 
 # --- 6. cosign keypair -> signing-secrets (Chains + app ns) -------------------

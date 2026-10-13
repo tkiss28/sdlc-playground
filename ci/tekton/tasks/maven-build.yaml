@@ -55,7 +55,28 @@ spec:
         # Use the Maven bundled in the ubi9/openjdk-17 builder image rather than
         # ./mvnw: the wrapper downloads apache-maven as a .tar.gz, and this image
         # has no gzip (and the step runs as a non-root UID that cannot install it).
-        mvn -s "$(workspaces.maven-settings.path)/settings.xml" $(params.goals)
+        #
+        # -Daether.connector.http.preemptiveAuth=true : Lightwell answers anonymous
+        # requests with HTTP 403 (not 401), so Maven's default *reactive* auth never
+        # gets a challenge and silently falls back to Maven Central for EVERY
+        # artifact. Forcing preemptive Basic auth makes validated coordinates
+        # actually resolve from lightwell-validated.
+        # Fail fast on missing/expired/wrong Lightwell credentials. Without this,
+        # Maven does NOT error on bad auth — it silently falls back to Maven
+        # Central, defeating the validated-source guarantee. Probe a known
+        # validated artifact and require HTTP 200 before building.
+        PROBE="https://packages.redhat.com/lightwell/java/validated/org/springframework/spring-aop/7.0.8/spring-aop-7.0.8.pom"
+        CODE="$(curl -s -o /dev/null -w '%{http_code}' -u "${RH_LIGHTWELL_USER}:${RH_LIGHTWELL_TOKEN}" "${PROBE}" || echo 000)"
+        if [ "${CODE}" != "200" ]; then
+          echo "ERROR: Lightwell auth probe failed (HTTP ${CODE}) as user '${RH_LIGHTWELL_USER}'." >&2
+          echo "       Check RH_LIGHTWELL_USER / RH_LIGHTWELL_TOKEN (unset? expired token? wrong account?)." >&2
+          exit 1
+        fi
+        echo "Lightwell auth probe OK (HTTP 200) — validated artifacts will resolve from Lightwell."
+
+        mvn -s "$(workspaces.maven-settings.path)/settings.xml" \
+            -Daether.connector.http.preemptiveAuth=true \
+            $(params.goals)
 
         # Record where the SBOM landed for the downstream attest step.
         SBOM="$(params.subdirectory)/target/bom.json"
