@@ -78,9 +78,18 @@ spec:
             -Daether.connector.http.preemptiveAuth=true \
             $(params.goals)
 
-        # Record where the SBOM landed for the downstream attest step.
-        SBOM="$(params.subdirectory)/target/bom.json"
-        SBOM="${SBOM#/}"
+        # Record where the SBOM landed for the downstream attest step. Don't assume
+        # target/bom.json: Spring Boot's cyclonedx config writes it to the classpath
+        # (target/classes/META-INF/sbom/application.cdx.json) so Actuator can serve
+        # it. Locate it instead, and emit a path relative to the workspace root
+        # (sbom-attest's workingDir).
+        SBOM_ABS="$(find "$(pwd)/target" \( -name 'application.cdx.json' -o -name 'bom.json' \) 2>/dev/null | head -1)"
+        if [ -z "${SBOM_ABS}" ]; then
+          echo "ERROR: no CycloneDX SBOM found under $(pwd)/target" >&2
+          exit 1
+        fi
+        SBOM="${SBOM_ABS#$(workspaces.source.path)/}"
+        echo "SBOM recorded at: ${SBOM}"
         printf '%s' "${SBOM}" > "$(results.sbom-path.path)"
 
         echo "=== Proof: where did aspectjweaver come from? ==="

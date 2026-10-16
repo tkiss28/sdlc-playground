@@ -41,3 +41,36 @@ subjects:
   - kind: ServiceAccount
     name: pipeline-sa
     namespace: petclinic
+---
+# buildah needs the SETFCAP capability, which the default restricted-v2 SCC
+# forbids. Grant pipeline-sa the use of pipelines-scc (allows SETFCAP, RunAsAny),
+# the SCC the OpenShift Pipelines operator ships for exactly this. Without it the
+# build-image pod fails admission (PodAdmissionFailed).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pipeline-sa-scc
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+rules:
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: ["pipelines-scc"]
+    verbs: ["use"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-sa-scc
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/part-of: sdlc-playground
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pipeline-sa-scc
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+    namespace: petclinic
